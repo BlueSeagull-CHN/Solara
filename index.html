@@ -18,7 +18,14 @@
     <link rel="stylesheet" href="css/style.css">
     <script src="js/config.js"></script>
     <script>
+        // 页面加载时立即检查登录状态，避免闪烁
         (function () {
+            if (localStorage.getItem('isLoggedIn') === 'true') {
+                document.documentElement.setAttribute('data-logged-in', 'true');
+            } else {
+                document.documentElement.setAttribute('data-logged-in', 'false');
+            }
+
             const ua = navigator.userAgent || "";
             const isMobileUA = /android|iphone|ipad|ipod|mobile|blackberry|phone|opera mini|windows phone/i.test(ua);
             const isSmallScreen = typeof window.matchMedia === "function" && window.matchMedia("(max-width: 820px)").matches;
@@ -68,7 +75,7 @@
     </script>
     <style>
         .login-container {
-            display: flex;
+            display: none;
             flex-direction: column;
             align-items: center;
             justify-content: center;
@@ -78,9 +85,15 @@
             color: #fff;
             padding: 20px;
             box-sizing: border-box;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            z-index: 1000;
         }
-        .login-container.hidden {
-            display: none;
+        html[data-logged-in="false"] .login-container {
+            display: flex;
         }
         .login-container h1 {
             font-size: 2.5rem;
@@ -90,79 +103,115 @@
         }
         .login-form {
             background: rgba(255, 255, 255, 0.95);
-            padding: 20px;
-            border-radius: 10px;
-            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+            padding: 30px;
+            border-radius: 15px;
+            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.2);
             width: 100%;
             max-width: 400px;
             display: flex;
             flex-direction: column;
             align-items: center;
+            backdrop-filter: blur(10px);
         }
         .login-container input {
             width: 100%;
-            padding: 12px;
-            margin-bottom: 15px;
+            padding: 15px;
+            margin-bottom: 20px;
             border: none;
-            border-radius: 5px;
+            border-radius: 8px;
             font-size: 1rem;
-            background: #f0f0f0;
+            background: rgba(255, 255, 255, 0.9);
             color: #333;
             transition: all 0.3s ease;
         }
         .login-container input:focus {
             outline: none;
-            box-shadow: 0 0 5px rgba(91, 186, 213, 0.8);
+            box-shadow: 0 0 0 3px rgba(91, 186, 213, 0.3);
             background: #fff;
+            transform: translateY(-2px);
+        }
+        .login-container input::placeholder {
+            color: #999;
         }
         .login-container button {
             width: 100%;
-            padding: 12px;
-            background-color: #5bbad5;
+            padding: 15px;
+            background: linear-gradient(135deg, #5bbad5 0%, #4aa3b8 100%);
             color: white;
             border: none;
-            border-radius: 5px;
+            border-radius: 8px;
             cursor: pointer;
             font-size: 1rem;
-            font-weight: 500;
-            transition: background-color 0.3s ease;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 15px rgba(91, 186, 213, 0.3);
         }
         .login-container button:hover {
-            background-color: #4aa3b8;
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(91, 186, 213, 0.4);
+        }
+        .login-container button:active {
+            transform: translateY(0);
         }
         .login-container .error {
             color: #ff4d4d;
             margin-top: 10px;
             font-size: 0.9rem;
-            display: none;
             text-align: center;
+            display: none;
+            background: rgba(255, 77, 77, 0.1);
+            padding: 8px 12px;
+            border-radius: 5px;
+            border-left: 4px solid #ff4d4d;
+        }
+        .main-content-container {
+            display: none;
+        }
+        html[data-logged-in="true"] .main-content-container {
+            display: block;
         }
         .logout-button {
-            position: absolute;
+            position: fixed;
             top: 20px;
             right: 20px;
-            background-color: #5bbad5;
+            z-index: 999;
+            background: linear-gradient(135deg, #ff6b6b, #ee5a52);
             color: white;
             border: none;
-            border-radius: 5px;
-            padding: 8px 12px;
+            border-radius: 25px;
+            padding: 10px 15px;
             cursor: pointer;
             font-size: 0.9rem;
             display: flex;
             align-items: center;
-            gap: 5px;
+            gap: 8px;
+            box-shadow: 0 4px 15px rgba(238, 90, 82, 0.3);
+            transition: all 0.3s ease;
+            backdrop-filter: blur(10px);
         }
         .logout-button:hover {
-            background-color: #4aa3b8;
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(238, 90, 82, 0.4);
         }
         @media (max-width: 820px) {
             .login-container h1 {
                 font-size: 2rem;
             }
             .login-form {
-                padding: 15px;
+                padding: 20px;
                 max-width: 90%;
             }
+            .logout-button {
+                top: 10px;
+                right: 10px;
+                padding: 8px 12px;
+                font-size: 0.8rem;
+            }
+        }
+        .login-container.loading input,
+        .login-container.loading button {
+            opacity: 0.7;
+            pointer-events: none;
         }
     </style>
 </head>
@@ -170,14 +219,14 @@
     <div class="login-container" id="loginContainer">
         <h1>Solara 登录</h1>
         <div class="login-form">
-            <input type="password" id="passwordInput" placeholder="请输入密码">
-            <button type="button" id="loginButton">登录</button>
+            <input type="password" id="passwordInput" placeholder="请输入访问密码">
+            <button type="button" id="loginButton">立即登录</button>
             <div class="error" id="errorMessage">密码错误，请重试</div>
         </div>
     </div>
-    <div class="main-content-container" id="mainContentContainer" style="display: none;">
+    <div class="main-content-container" id="mainContentContainer">
         <button class="logout-button" id="logoutButton" type="button" title="退出登录">
-            <i class="fas fa-sign-out-alt"></i> 退出
+            <i class="fas fa-sign-out-alt"></i> 退出登录
         </button>
         <div class="background-stage" id="backgroundStage" aria-hidden="true">
             <div class="background-stage__layer background-stage__layer--base" id="backgroundBaseLayer"></div>
@@ -205,7 +254,6 @@
                     </button>
                 </div>
             </div>
-
             <div class="search-area" id="searchArea">
                 <button type="button" class="mobile-close-btn" id="mobileSearchClose" aria-label="关闭搜索">
                     <i class="fas fa-times" aria-hidden="true"></i>
@@ -226,7 +274,6 @@
                 </div>
                 <div id="searchResults" class="search-results"></div>
             </div>
-
             <div class="main-content">
                 <div class="cover-area">
                     <div class="mobile-turntable" id="mobileTurntable">
@@ -256,7 +303,6 @@
                         </button>
                     </div>
                 </div>
-
                 <div class="mobile-panel" id="mobilePanel">
                     <div class="mobile-panel-header" id="mobilePanelHeader">
                         <div class="mobile-panel-handle" aria-hidden="true"></div>
@@ -278,7 +324,6 @@
                             </button>
                         </div>
                     </div>
-
                     <div class="playlist active empty" id="playlist">
                         <div class="playlist-label" aria-hidden="true">播放列表</div>
                         <button class="clear-playlist-btn" id="clearPlaylistBtn" onclick="clearPlaylist()" title="清空播放列表">
@@ -295,7 +340,6 @@
                     </div>
                 </div>
             </div>
-
             <div class="controls">
                 <div class="transport-controls">
                     <button class="play-mode-btn transport-button transport-button--mode" id="playModeBtn" type="button" title="播放模式">
@@ -329,18 +373,11 @@
                 </button>
             </div>
         </div>
-
         <div class="mobile-overlay-scrim" id="mobileOverlayScrim"></div>
-
         <audio id="audioPlayer"></audio>
-
-        <!-- 通知容器 -->
         <div id="notification" class="notification"></div>
-
-        <!-- 调试信息容器 -->
         <div id="debugInfo" class="debug-info"></div>
     </div>
-
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     <script src="js/index.js"></script>
     <script>
@@ -353,7 +390,7 @@
         }
 
         // 登录逻辑
-        document.addEventListener('DOMContentLoaded', () => {
+        (function () {
             const loginContainer = document.getElementById('loginContainer');
             const mainContentContainer = document.getElementById('mainContentContainer');
             const passwordInput = document.getElementById('passwordInput');
@@ -363,33 +400,33 @@
 
             // 确保 config.js 已加载
             if (!window.APP_CONFIG || !window.APP_CONFIG.PASSWORD) {
-                errorMessage.textContent = '配置加载失败，请检查 config.js';
+                errorMessage.textContent = '配置加载失败，请检查部署配置';
                 errorMessage.style.display = 'block';
                 return;
             }
 
-            // 检查登录状态
-            if (localStorage.getItem('isLoggedIn') === 'true') {
-                loginContainer.classList.add('hidden');
-                mainContentContainer.style.display = 'block';
-            } else {
-                loginContainer.classList.remove('hidden');
-                mainContentContainer.style.display = 'none';
-            }
-
+            // 登录按钮事件
             loginButton.addEventListener('click', () => {
-                const enteredPassword = passwordInput.value;
+                const enteredPassword = passwordInput.value.trim();
+                if (!enteredPassword) {
+                    errorMessage.textContent = '请输入密码';
+                    errorMessage.style.display = 'block';
+                    return;
+                }
                 if (enteredPassword === window.APP_CONFIG.PASSWORD) {
                     localStorage.setItem('isLoggedIn', 'true');
-                    loginContainer.classList.add('hidden');
-                    mainContentContainer.style.display = 'block';
+                    document.documentElement.setAttribute('data-logged-in', 'true');
                     errorMessage.style.display = 'none';
+                    passwordInput.value = '';
                 } else {
+                    errorMessage.textContent = '密码错误，请重试';
                     errorMessage.style.display = 'block';
+                    passwordInput.value = '';
+                    passwordInput.focus();
                 }
             });
 
-            // 支持按回车键登录
+            // 支持回车键登录
             passwordInput.addEventListener('keypress', (e) => {
                 if (e.key === 'Enter') {
                     loginButton.click();
@@ -399,12 +436,18 @@
             // 登出功能
             logoutButton.addEventListener('click', () => {
                 localStorage.removeItem('isLoggedIn');
-                mainContentContainer.style.display = 'none';
-                loginContainer.classList.remove('hidden');
+                document.documentElement.setAttribute('data-logged-in', 'false');
                 passwordInput.value = '';
                 errorMessage.style.display = 'none';
+                passwordInput.focus();
+                window.scrollTo(0, 0);
             });
-        });
+
+            // 初始聚焦
+            if (document.documentElement.getAttribute('data-logged-in') === 'false') {
+                passwordInput.focus();
+            }
+        })();
     </script>
 </body>
 </html>
