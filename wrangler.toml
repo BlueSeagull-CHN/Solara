@@ -1,0 +1,5 @@
+name = "solara"  # 替换为你的 Pages 项目名称
+compatibility_date = "2025-10-15"
+
+[build]
+command = "echo 'window.APP_CONFIG = { PASSWORD: \"'$LOGIN_PASSWORD'\" };' > js/config.js"
