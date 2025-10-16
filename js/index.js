@@ -461,7 +461,6 @@ const savedCurrentPlaylist = (() => {
     return playlists.includes(stored) ? stored : "playlist";
 })();
 
-// API配置 - 保持原有
 const API = {
     baseUrl: "/proxy",
 
@@ -606,7 +605,7 @@ const state = {
     searchSource: savedSearchSource,
     hasMoreResults: true,
     currentSong: savedCurrentSong,
-    debugMode: false,
+    debugMode: true, // 启用调试模式以便排查
     isSearchMode: false, // 新增：搜索模式状态
     playlistSongs: savedPlaylistSongs, // 新增：统一播放列表
     playMode: savedPlayMode, // 新增：播放模式 'list', 'single', 'random'
@@ -825,7 +824,6 @@ function setDocumentGradient(gradient, { immediate = false } = {}) {
         return;
     }
 
-    // 以下为截断部分的补全，基于逻辑推断
     setGlobalThemeProperty("--bg-gradient-next", normalized);
     backgroundTransitionTimer = setTimeout(() => {
         setGlobalThemeProperty("--bg-gradient", normalized);
@@ -974,7 +972,54 @@ async function exploreOnlineMusic() {
     }
 }
 
-// 以下为截断部分的完整代码（从用户提供的文档补全，保持原样）
+// 新增：播放歌曲的核心函数
+async function playSong(song) {
+    if (!song) return;
+
+    try {
+        // 获取音频 URL
+        const audioUrl = API.getSongUrl(song, state.playbackQuality);
+        debugLog(`获取音频URL: ${audioUrl}`);
+        const audioData = await API.fetchJson(audioUrl);
+
+        if (!audioData || !audioData.url) {
+            throw new Error("无法获取音频地址");
+        }
+
+        const proxiedAudioUrl = buildAudioProxyUrl(audioData.url);
+        const preferredAudioUrl = preferHttpsUrl(audioData.url);
+        const finalAudioUrl = proxiedAudioUrl || preferredAudioUrl || audioData.url;
+
+        // 设置音频播放器
+        state.currentSong = song;
+        state.currentAudioUrl = finalAudioUrl;
+        dom.audioPlayer.src = finalAudioUrl;
+        dom.audioPlayer.play().catch(error => {
+            console.error("播放失败:", error);
+            showNotification("播放失败，请检查网络连接", "error");
+        });
+
+        // 更新歌曲信息
+        updateCurrentSongInfo(song, { loadArtwork: true });
+
+        // 加载歌词
+        await loadLyrics(song);
+
+        // 保存状态
+        savePlayerState();
+
+        // 更新播放按钮
+        updatePlayPauseButton();
+
+        showNotification(`正在播放: ${song.name}`, "success");
+        debugLog(`开始播放: ${song.name} @${state.playbackQuality}`);
+    } catch (error) {
+        console.error("播放失败:", error);
+        showNotification("播放失败，请稍后重试", "error");
+        debugLog(`播放失败: ${error.message}`);
+        throw error;
+    }
+}
 
 // 播放搜索结果 - 添加到播放列表而不是清空
 async function playSearchResult(index) {
@@ -1573,6 +1618,32 @@ function hideSearchResults() {
     }
 }
 
+// 更新源选择菜单
+function updateSourceMenuPosition() {
+    if (!state.sourceMenuOpen || !dom.sourceMenu || !dom.sourceSelectButton) return;
+
+    const buttonRect = dom.sourceSelectButton.getBoundingClientRect();
+    const menu = dom.sourceMenu;
+
+    menu.style.top = `${buttonRect.bottom + window.scrollY}px`;
+    menu.style.left = `${buttonRect.left + window.scrollX}px`;
+    menu.style.width = `${buttonRect.width}px`;
+}
+
+function toggleSourceMenu() {
+    state.sourceMenuOpen = !state.sourceMenuOpen;
+    if (dom.sourceMenu) {
+        dom.sourceMenu.classList.toggle("open", state.sourceMenuOpen);
+        if (state.sourceMenuOpen) {
+            scheduleSourceMenuPositionUpdate();
+            ensureFloatingMenuListeners();
+        } else {
+            cancelSourceMenuPositionUpdate();
+            releaseFloatingMenuListenersIfIdle();
+        }
+    }
+}
+
 // 初始化事件监听器
 document.addEventListener("DOMContentLoaded", () => {
     // 探索雷达按钮
@@ -1619,6 +1690,28 @@ document.addEventListener("DOMContentLoaded", () => {
             } catch (error) {
                 console.error("搜索失败:", error);
                 showNotification("搜索失败，请稍后重试", "error");
+            }
+        });
+    }
+
+    // 源选择按钮
+    if (dom.sourceSelectButton && dom.sourceMenu) {
+        dom.sourceSelectButton.addEventListener("click", toggleSourceMenu);
+
+        dom.sourceMenu.addEventListener("click", (event) => {
+            const target = event.target.closest("[data-source]");
+            if (!target) return;
+
+            const source = target.dataset.source;
+            if (SOURCE_OPTIONS.some(opt => opt.value === source)) {
+                state.searchSource = source;
+                safeSetLocalStorage("searchSource", source);
+                const sourceOption = SOURCE_OPTIONS.find(opt => opt.value === source);
+                if (dom.sourceSelectLabel) {
+                    dom.sourceSelectLabel.textContent = sourceOption ? sourceOption.label : "未知源";
+                }
+                toggleSourceMenu();
+                showNotification(`搜索源已切换为: ${sourceOption.label}`);
             }
         });
     }
